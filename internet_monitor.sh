@@ -13,14 +13,21 @@ PING_HOST="${PING_HOST:-1.1.1.1}"
 PING_COUNT=1
 PING_TIMEOUT="${PING_TIMEOUT:-2}"      # seconds to wait per ping
 CHECK_INTERVAL="${CHECK_INTERVAL:-60}" # seconds between checks
+LOG_FILE="${LOG_FILE:-./internet_monitor.log}"
+CACHE_FILE="${CACHE_FILE:-./influx_cache.txt}"
 # ————————————————————————————————————
 
 WRITE_URL="$INFLUX_URL/api/v2/write?org=$INFLUX_ORG&bucket=$INFLUX_BUCKET&precision=s"
+
+# ensure log & cache exist
+touch "$LOG_FILE" "$CACHE_FILE"
 
 echo "Starting Internet Monitor:"
 echo " • PING $PING_HOST (timeout ${PING_TIMEOUT}s)"
 echo " • Interval: ${CHECK_INTERVAL}s"
 echo " • InfluxDB → $WRITE_URL (measurement: $INFLUX_MEASUREMENT)"
+echo " • Local log → $LOG_FILE"
+echo " • Cache file → $CACHE_FILE"
 echo
 
 while true; do
@@ -45,17 +52,26 @@ while true; do
     DATA="${INFLUX_MEASUREMENT} status=${STATUS} ${TIMESTAMP}"
   fi
 
-  # Send to InfluxDB
-  curl -s -XPOST "$WRITE_URL" \
-       --header "Authorization: Token $INFLUX_TOKEN" \
-       --data-raw "$DATA" \
-    || echo "Warning: failed to write to InfluxDB at $(date)"
-
-  # Log locally
   if [[ $STATUS -eq 1 ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Online — ${LATENCY:-n/a} ms"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Online — ${LATENCY:-n/a} ms" \
+      | tee -a "$LOG_FILE"
   else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Offline"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Offline" \
+      | tee -a "$LOG_FILE"
+  fi
+
+  echo "$DATA" >> "$CACHE_FILE"
+
+  # Send to InfluxDB
+  if curl -s -XPOST "$WRITE_URL" \
+       --header "Authorization: Token $INFLUX_TOKEN" \
+       --data-raw @"$CACHE_FILE"
+  then
+    # on success, clear the cache
+    : > "$CACHE_FILE"
+  else
+    echo "Warning: failed to write to InfluxDB at $(date '+%Y-%m-%d %H:%M:%S')" \
+      >> "$LOG_FILE"
   fi
 
   sleep "$CHECK_INTERVAL"
