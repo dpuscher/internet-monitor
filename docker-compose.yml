@@ -1,0 +1,61 @@
+version: "3.7"
+
+services:
+  influxdb:
+    image: influxdb:2.7-alpine
+    platform: linux/amd64
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb-config:/etc/influxdb2
+      - influxdb-data:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME_FILE=/run/secrets/influxdb-init-username
+      - DOCKER_INFLUXDB_INIT_PASSWORD_FILE=/run/secrets/influxdb-init-password
+      - DOCKER_INFLUXDB_INIT_ORG=dpuscher
+      - DOCKER_INFLUXDB_INIT_BUCKET=internet
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE=/run/secrets/influxdb-token
+    secrets:
+      - influxdb-init-username
+      - influxdb-init-password
+      - influxdb-token
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - influxdb
+
+  internet-monitor:
+    build: .
+    container_name: internet-monitor
+    depends_on:
+      - influxdb
+    environment:
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_ORG=dpuscher
+      - INFLUX_BUCKET=internet
+      - INFLUX_TOKEN_FILE=/run/secrets/influxdb-token
+      - INFLUX_MEASUREMENT=internet_status
+    secrets:
+      - influxdb-init-username
+      - influxdb-token
+
+volumes:
+  influxdb-config:
+  influxdb-data:
+  grafana-data:
+
+secrets:
+  influxdb-init-username:
+    file: ./secrets/influxdb-init-username.txt
+  influxdb-init-password:
+    file: ./secrets/influxdb-init-password.txt
+  influxdb-token:
+    file: ./secrets/influxdb-token.txt
