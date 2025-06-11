@@ -41,14 +41,19 @@ services:
       - INFLUX_BUCKET=internet
       - INFLUX_TOKEN_FILE=/run/secrets/influxdb-token
       - INFLUX_MEASUREMENT=internet_status
+      - LOG_FILE=/app/data/internet_monitor.log
+      - CACHE_FILE=/app/data/influx_cache.txt
     secrets:
       - influxdb-init-username
       - influxdb-token
+    volumes:
+      - monitor-data:/app/data
 
 volumes:
   influxdb-config:
   influxdb-data:
   grafana-data:
+  monitor-data:
 
 secrets:
   influxdb-init-username:
