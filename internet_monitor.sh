@@ -62,15 +62,21 @@ while true; do
 
   echo "$DATA" >> "$CACHE_FILE"
 
-  # Send to InfluxDB
-  if curl -s -XPOST "$WRITE_URL" \
-       --header "Authorization: Token $INFLUX_TOKEN" \
-       --data-raw @"$CACHE_FILE"
-  then
-    # on success, clear the cache
+  HTTP_RESPONSE="$(curl -w "%{http_code}" \
+    -XPOST "$WRITE_URL" \
+    -H "Authorization: Token $INFLUX_TOKEN" \
+    -H "Content-Type: text/plain; charset=utf-8" \
+    --data-binary @"$CACHE_FILE" \
+    --silent --show-error || echo "CURL_ERR")"
+
+  HTTP_CODE="${HTTP_RESPONSE: -3}"
+  HTTP_BODY="${HTTP_RESPONSE:0:${#HTTP_RESPONSE}-3}"
+
+  if [[ "$HTTP_CODE" == "204" ]]; then
+    # success
     : > "$CACHE_FILE"
   else
-    echo "Warning: failed to write to InfluxDB at $(date '+%Y-%m-%d %H:%M:%S')" \
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR writing to InfluxDB: code=$HTTP_CODE body='$HTTP_BODY'" \
       >> "$LOG_FILE"
   fi
 
